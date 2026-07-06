@@ -1,0 +1,7 @@
+.git
+.gitignore
+/data/
+/family-visits
+*.md
+.env
+.env.local
