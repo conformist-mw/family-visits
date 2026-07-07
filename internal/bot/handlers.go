@@ -15,30 +15,30 @@ import (
 
 const startText = `Привет! Я веду семейные визиты (маникюр, ортодонт, врачи…).
 
-Добавить — командой /add и текстом, можно несколько строк:
-/add 8.07 11:30 Педикюр Олежа
-/add завтра 15:00 ортодонт
+Добавить — командой /visit и текстом, можно несколько строк:
+/visit 8.07 11:30 Педикюр Олежа
+/visit завтра 15:00 ортодонт
 
 Если «кто» не указан — подставлю того, кто написал.
 
 Команды:
-/add — добавить визит
+/visit — добавить визит
 /week — что на ближайшую неделю
 /list — все визиты (там же перенос и отмена)
 /help — эта справка
 
-(В личке со мной можно писать визиты и без /add.)`
+(В личке со мной можно писать визиты и без /visit.)`
 
 func (b *Bot) cmdStart(c tele.Context) error {
 	return c.Send(startText)
 }
 
-// cmdAdd is the explicit capture trigger — the only way to add a visit in a
+// cmdVisit is the explicit capture trigger — the only way to add a visit in a
 // group, where free text is other people's chatter.
-func (b *Bot) cmdAdd(c tele.Context) error {
+func (b *Bot) cmdVisit(c tele.Context) error {
 	text := commandPayload(c.Text())
 	if text == "" {
-		return c.Send("Напиши визит после команды, например:\n/add завтра 15:00 педикюр")
+		return c.Send("Напиши визит после команды, например:\n/visit завтра 15:00 педикюр")
 	}
 	return b.captureText(c, text, b.now())
 }
@@ -112,7 +112,7 @@ func (b *Bot) captureText(c tele.Context, text string, now time.Time) error {
 		return c.Send("Не смог разобрать текст 😕 Попробуй ещё раз.")
 	}
 	if len(parsed) == 0 {
-		return c.Send("Не нашёл визитов. Пример: /add 8.07 11:30 Педикюр Олежа")
+		return c.Send("Не нашёл визитов. Пример: /visit 8.07 11:30 Педикюр Олежа")
 	}
 
 	// Unspecified (or self-referential) "who" defaults to the message sender —

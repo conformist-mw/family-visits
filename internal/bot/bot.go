@@ -90,7 +90,7 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 
 	tb.Handle("/start", bot.cmdStart)
 	tb.Handle("/help", bot.cmdStart)
-	tb.Handle("/add", bot.cmdAdd)
+	tb.Handle("/visit", bot.cmdVisit)
 	tb.Handle("/list", bot.cmdList)
 	tb.Handle("/week", bot.cmdWeek)
 	tb.Handle(tele.OnText, bot.onText)
@@ -103,7 +103,7 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 	// Populate the "/" command menu (best-effort; a network hiccup here must
 	// not block startup).
 	if err := tb.SetCommands([]tele.Command{
-		{Text: "add", Description: "Добавить визит: /add завтра 15:00 педикюр"},
+		{Text: "visit", Description: "Добавить визит: /visit завтра 15:00 педикюр"},
 		{Text: "week", Description: "Что на ближайшую неделю"},
 		{Text: "list", Description: "Все визиты (перенос/отмена)"},
 		{Text: "help", Description: "Как пользоваться"},
