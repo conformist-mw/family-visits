@@ -17,6 +17,8 @@ import (
 
 	"visits/internal/bot"
 	"visits/internal/db"
+	"visits/internal/ics"
+	"visits/internal/model"
 	"visits/internal/parse"
 	"visits/internal/store"
 )
@@ -47,8 +49,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	st := store.New(database)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("/calendar.ics", icsHandler(st, loc, os.Getenv("ICS_TOKEN"), logger))
 
 	if token := os.Getenv("TELEGRAM_BOT_TOKEN"); token != "" {
 		apiKey := os.Getenv("GEMINI_API_KEY")
@@ -75,7 +80,7 @@ func main() {
 			WeeklyDigestDOW:  parseDOW(os.Getenv("WEEKLY_DIGEST_DOW")),
 			WeeklyDigestTime: os.Getenv("WEEKLY_DIGEST_TIME"),
 		}
-		vbot, err := bot.New(cfg, store.New(database), parser, logger)
+		vbot, err := bot.New(cfg, st, parser, logger)
 		if err != nil {
 			logger.Error("bot init", "err", err)
 			os.Exit(1)
@@ -113,6 +118,28 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", "err", err)
+	}
+}
+
+// icsHandler serves the calendar feed HA's Remote Calendar polls. It includes
+// visits from 30 days back so recently-passed ones still render. If token is
+// non-empty, a matching ?token= query param is required.
+func icsHandler(st *store.Store, loc *time.Location, token string, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if token != "" && r.URL.Query().Get("token") != token {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		now := time.Now().In(loc)
+		from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -30)
+		items, err := st.ActiveFrom(from.Format(model.LocalDatetime))
+		if err != nil {
+			logger.Error("ics: query", "err", err)
+			http.Error(w, "error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+		w.Write(ics.Render(items, loc, now))
 	}
 }
 

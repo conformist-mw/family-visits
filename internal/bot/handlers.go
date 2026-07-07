@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +38,26 @@ func (b *Bot) cmdList(c tele.Context) error {
 	if len(items) == 0 {
 		return c.Send("Будущих визитов нет.")
 	}
-	return c.Send("📋 Все будущие визиты:\n\n"+b.formatList(items), tele.ModeHTML)
+	if err := c.Send("📋 Все будущие визиты:"); err != nil {
+		return err
+	}
+	// One message per visit so each carries its own reschedule/cancel buttons.
+	for _, a := range items {
+		if err := c.Send(b.formatAppt(a), b.apptMarkup(a.ID), tele.ModeHTML); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Bot) apptMarkup(id int64) *tele.ReplyMarkup {
+	m := &tele.ReplyMarkup{}
+	ids := strconv.FormatInt(id, 10)
+	m.Inline(m.Row(
+		m.Data("→ Перенести", "appt_resched", ids),
+		m.Data("✗ Отменить", "appt_del", ids),
+	))
+	return m
 }
 
 func (b *Bot) cmdWeek(c tele.Context) error {
@@ -50,11 +70,17 @@ func (b *Bot) onText(c tele.Context) error {
 	if text == "" || strings.HasPrefix(text, "/") {
 		return nil
 	}
+	now := b.now()
+
+	// If this user just tapped "Перенести", their next message is the new time
+	// for that visit — not a new appointment.
+	if apptID, ok := b.awaiting.take(senderID(c), now); ok {
+		return b.applyReschedule(c, apptID, text, now)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	now := b.now()
 	parsed, err := b.parser.Parse(ctx, text, now)
 	if err != nil {
 		b.logger.Error("bot: parse", "err", err)
@@ -131,6 +157,36 @@ func (b *Bot) formatList(items []model.Appointment) string {
 }
 
 func (b *Bot) now() time.Time { return time.Now().In(b.cfg.Loc) }
+
+// applyReschedule parses a datetime from text and moves the appointment.
+func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now time.Time) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	when, _, err := b.parser.ParseWhen(ctx, text, now)
+	if err != nil {
+		b.logger.Error("bot: parse when", "err", err)
+		b.awaiting.set(senderID(c), apptID, now) // keep it, let the user retry
+		return c.Send("Не понял дату. Напиши, например: в пятницу 17:00")
+	}
+	if err := b.store.Reschedule(apptID, when.Format(model.LocalDatetime)); err != nil {
+		b.logger.Error("bot: reschedule", "err", err, "id", apptID)
+		return c.Send("Не удалось перенести 😕")
+	}
+	a, err := b.store.Get(apptID)
+	if err != nil {
+		return c.Send("Перенёс, но не смог показать 🤔")
+	}
+	return c.Send("✅ Перенесено:\n"+b.formatAppt(a), tele.ModeHTML)
+}
+
+// senderID is the message author's Telegram id (0 if unknown).
+func senderID(c tele.Context) int64 {
+	if u := c.Sender(); u != nil {
+		return u.ID
+	}
+	return 0
+}
 
 // senderName is the best display name for the message author, used as the
 // default "who".

@@ -106,6 +106,52 @@ func (p *Parser) Parse(ctx context.Context, text string, now time.Time) ([]Parse
 	return out, nil
 }
 
+type whenItem struct {
+	Start      string `json:"start"`
+	Confidence string `json:"confidence"`
+}
+
+var whenSchema = &genai.Schema{
+	Type: genai.TypeObject,
+	Properties: map[string]*genai.Schema{
+		"start":      {Type: genai.TypeString, Description: "ISO 8601 local datetime, e.g. 2026-07-08T11:30"},
+		"confidence": {Type: genai.TypeString, Enum: []string{"high", "low"}},
+	},
+	Required: []string{"start", "confidence"},
+}
+
+// ParseWhen extracts a single datetime from free text ("в пятницу 17:00",
+// "завтра 10", "22.08 14:30") — used when rescheduling an existing visit.
+func (p *Parser) ParseWhen(ctx context.Context, text string, now time.Time) (time.Time, string, error) {
+	var sb strings.Builder
+	sb.WriteString("Извлеки одну дату и время из текста. ")
+	fmt.Fprintf(&sb, "Сейчас: %s (%s), таймзона %s. ",
+		now.Format("2006-01-02 15:04"), weekdayRU(now.Weekday()), p.loc.String())
+	sb.WriteString("Год обычно не указан — резолви в ближайшее будущее. ")
+	sb.WriteString("Верни start как локальное ISO 8601 без смещения: 2006-01-02T15:04. ")
+	sb.WriteString("confidence=low, если дата/время неоднозначны.")
+
+	cfg := &genai.GenerateContentConfig{
+		SystemInstruction: genai.NewContentFromText(sb.String(), genai.RoleUser),
+		ResponseMIMEType:  "application/json",
+		ResponseSchema:    whenSchema,
+		Temperature:       genai.Ptr[float32](0),
+	}
+	res, err := p.client.Models.GenerateContent(ctx, p.model, genai.Text(text), cfg)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("gemini generate: %w", err)
+	}
+	var it whenItem
+	if err := json.Unmarshal([]byte(res.Text()), &it); err != nil {
+		return time.Time{}, "", fmt.Errorf("decode when result: %w", err)
+	}
+	t, err := normalizeStart(it.Start, p.loc)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	return t, it.Confidence, nil
+}
+
 func (p *Parser) systemPrompt(now time.Time) string {
 	var b strings.Builder
 	b.WriteString("Ты парсишь неформальные заметки семьи о будущих визитах ")

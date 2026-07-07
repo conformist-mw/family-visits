@@ -37,7 +37,8 @@ type Bot struct {
 	logger  *slog.Logger
 	allowed map[int64]bool
 
-	pending *pendingStore
+	pending  *pendingStore
+	awaiting *awaitingStore
 }
 
 // ParseChatIDs parses a comma-separated list of int64 chat ids.
@@ -72,13 +73,14 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 	}
 
 	bot := &Bot{
-		b:       tb,
-		cfg:     cfg,
-		store:   st,
-		parser:  parser,
-		logger:  logger,
-		allowed: make(map[int64]bool, len(cfg.AllowedChats)),
-		pending: newPendingStore(),
+		b:        tb,
+		cfg:      cfg,
+		store:    st,
+		parser:   parser,
+		logger:   logger,
+		allowed:  make(map[int64]bool, len(cfg.AllowedChats)),
+		pending:  newPendingStore(),
+		awaiting: newAwaitingStore(),
 	}
 	for _, id := range cfg.AllowedChats {
 		bot.allowed[id] = true
@@ -94,6 +96,8 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 
 	tb.Handle(&tele.Btn{Unique: "appt_save"}, bot.onSave)
 	tb.Handle(&tele.Btn{Unique: "appt_cancel"}, bot.onCancel)
+	tb.Handle(&tele.Btn{Unique: "appt_resched"}, bot.onReschedule)
+	tb.Handle(&tele.Btn{Unique: "appt_del"}, bot.onCancelAppt)
 
 	return bot, nil
 }

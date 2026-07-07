@@ -96,12 +96,29 @@ func (s *Store) Between(from, to string) ([]model.Appointment, error) {
 		ORDER BY starts_at ASC`, model.StatusCancelled, from, to)
 }
 
-// SetStatus updates status and bumps updated_at so the HA exporter re-syncs.
+// SetStatus updates status and bumps updated_at.
 func (s *Store) SetStatus(id int64, status string) error {
 	_, err := s.db.Exec(`
 		UPDATE appointments SET status = ?, updated_at = `+nowExpr+`
 		WHERE id = ?`, status, id)
 	return err
+}
+
+// Reschedule moves an appointment to a new start (LocalDatetime) and bumps
+// updated_at; the ICS feed reflects it on HA's next poll.
+func (s *Store) Reschedule(id int64, newStart string) error {
+	_, err := s.db.Exec(`
+		UPDATE appointments SET starts_at = ?, updated_at = `+nowExpr+`
+		WHERE id = ?`, newStart, id)
+	return err
+}
+
+// ActiveFrom returns non-cancelled, non-deleted appointments starting at or
+// after `from` (LocalDatetime), soonest first — the source for the ICS feed.
+func (s *Store) ActiveFrom(from string) ([]model.Appointment, error) {
+	return s.query(selectCols+`
+		WHERE deleted_at IS NULL AND status != ? AND starts_at >= ?
+		ORDER BY starts_at ASC`, model.StatusCancelled, from)
 }
 
 const nowExpr = `strftime('%Y-%m-%dT%H:%M:%S','now','localtime')`
