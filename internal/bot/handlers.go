@@ -13,19 +13,34 @@ import (
 	"visits/internal/parse"
 )
 
-const startText = `Привет! Пиши будущие визиты как обычно — датой, временем и «что + кто». Можно несколько за раз:
+const startText = `Привет! Я веду семейные визиты (маникюр, ортодонт, врачи…).
 
-8.07 11:30 Педикюр Олежа
-16.07 11:45 Ортодонт я
+Добавить — командой /add и текстом, можно несколько строк:
+/add 8.07 11:30 Педикюр Олежа
+/add завтра 15:00 ортодонт
 
-Я разберу и переспрошу перед сохранением.
+Если «кто» не указан — подставлю того, кто написал.
 
 Команды:
+/add — добавить визит
 /week — что на ближайшую неделю
-/list — все будущие визиты`
+/list — все визиты (там же перенос и отмена)
+/help — эта справка
+
+(В личке со мной можно писать визиты и без /add.)`
 
 func (b *Bot) cmdStart(c tele.Context) error {
 	return c.Send(startText)
+}
+
+// cmdAdd is the explicit capture trigger — the only way to add a visit in a
+// group, where free text is other people's chatter.
+func (b *Bot) cmdAdd(c tele.Context) error {
+	text := commandPayload(c.Text())
+	if text == "" {
+		return c.Send("Напиши визит после команды, например:\n/add завтра 15:00 педикюр")
+	}
+	return b.captureText(c, text, b.now())
 }
 
 func (b *Bot) cmdList(c tele.Context) error {
@@ -73,11 +88,21 @@ func (b *Bot) onText(c tele.Context) error {
 	now := b.now()
 
 	// If this user just tapped "Перенести", their next message is the new time
-	// for that visit — not a new appointment.
+	// for that visit — handled in any chat type.
 	if apptID, ok := b.awaiting.take(senderID(c), now); ok {
 		return b.applyReschedule(c, apptID, text, now)
 	}
 
+	// In groups the bot must not run every message through Gemini — capture is
+	// explicit via /add. Free text is a visit only in a private chat.
+	if !isPrivate(c) {
+		return nil
+	}
+	return b.captureText(c, text, now)
+}
+
+// captureText parses free text into appointments and shows a confirmation card.
+func (b *Bot) captureText(c tele.Context, text string, now time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -87,7 +112,7 @@ func (b *Bot) onText(c tele.Context) error {
 		return c.Send("Не смог разобрать текст 😕 Попробуй ещё раз.")
 	}
 	if len(parsed) == 0 {
-		return c.Send("Не нашёл визитов. Пример: 8.07 11:30 Педикюр Олежа")
+		return c.Send("Не нашёл визитов. Пример: /add 8.07 11:30 Педикюр Олежа")
 	}
 
 	// Unspecified (or self-referential) "who" defaults to the message sender —
@@ -96,6 +121,24 @@ func (b *Bot) onText(c tele.Context) error {
 
 	key := b.pending.put(parsed, now)
 	return c.Send(b.confirmText(parsed), b.confirmMarkup(key, len(parsed)), tele.ModeHTML)
+}
+
+func isPrivate(c tele.Context) bool {
+	return c.Chat() != nil && c.Chat().Type == tele.ChatPrivate
+}
+
+// commandPayload returns everything after the leading /command token, handling
+// "/add@bot rest" and multi-line "/add\nrest".
+func commandPayload(text string) string {
+	text = strings.TrimSpace(text)
+	if !strings.HasPrefix(text, "/") {
+		return text
+	}
+	i := strings.IndexAny(text, " \n\t")
+	if i < 0 {
+		return ""
+	}
+	return strings.TrimSpace(text[i+1:])
 }
 
 func (b *Bot) confirmText(parsed []parse.Parsed) string {

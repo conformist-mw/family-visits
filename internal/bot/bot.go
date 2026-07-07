@@ -90,6 +90,7 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 
 	tb.Handle("/start", bot.cmdStart)
 	tb.Handle("/help", bot.cmdStart)
+	tb.Handle("/add", bot.cmdAdd)
 	tb.Handle("/list", bot.cmdList)
 	tb.Handle("/week", bot.cmdWeek)
 	tb.Handle(tele.OnText, bot.onText)
@@ -98,6 +99,17 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 	tb.Handle(&tele.Btn{Unique: "appt_cancel"}, bot.onCancel)
 	tb.Handle(&tele.Btn{Unique: "appt_resched"}, bot.onReschedule)
 	tb.Handle(&tele.Btn{Unique: "appt_del"}, bot.onCancelAppt)
+
+	// Populate the "/" command menu (best-effort; a network hiccup here must
+	// not block startup).
+	if err := tb.SetCommands([]tele.Command{
+		{Text: "add", Description: "Добавить визит: /add завтра 15:00 педикюр"},
+		{Text: "week", Description: "Что на ближайшую неделю"},
+		{Text: "list", Description: "Все визиты (перенос/отмена)"},
+		{Text: "help", Description: "Как пользоваться"},
+	}); err != nil {
+		logger.Warn("bot: set commands", "err", err)
+	}
 
 	return bot, nil
 }
