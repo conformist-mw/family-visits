@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +23,7 @@ const startText = `Привет! Я веду семейные визиты (ма
 Команды:
 /visit — добавить визит
 /week — что на ближайшую неделю
-/list — все визиты (там же перенос и отмена)
+/list — визиты по неделям (перенос, правка, отмена)
 /help — эта справка
 
 (В личке со мной можно писать визиты и без /visit.)`
@@ -44,35 +43,15 @@ func (b *Bot) cmdVisit(c tele.Context) error {
 }
 
 func (b *Bot) cmdList(c tele.Context) error {
-	now := b.now()
-	items, err := b.store.Upcoming(now.Format(model.LocalDatetime), 50)
+	text, markup, empty, err := b.listView(0)
 	if err != nil {
-		b.logger.Error("bot: upcoming query", "err", err)
+		b.logger.Error("bot: list view", "err", err)
 		return c.Send("Не смог достать список 😕")
 	}
-	if len(items) == 0 {
+	if empty {
 		return c.Send("Будущих визитов нет.")
 	}
-	if err := c.Send("📋 Все будущие визиты:"); err != nil {
-		return err
-	}
-	// One message per visit so each carries its own reschedule/cancel buttons.
-	for _, a := range items {
-		if err := c.Send(b.formatAppt(a), b.apptMarkup(a.ID), tele.ModeHTML); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (b *Bot) apptMarkup(id int64) *tele.ReplyMarkup {
-	m := &tele.ReplyMarkup{}
-	ids := strconv.FormatInt(id, 10)
-	m.Inline(m.Row(
-		m.Data("→ Перенести", "appt_resched", ids),
-		m.Data("✗ Отменить", "appt_del", ids),
-	))
-	return m
+	return c.Send(text, markup, tele.ModeHTML)
 }
 
 func (b *Bot) cmdWeek(c tele.Context) error {
@@ -87,10 +66,10 @@ func (b *Bot) onText(c tele.Context) error {
 	}
 	now := b.now()
 
-	// If this user just tapped "Перенести", their next message is the new time
-	// for that visit — handled in any chat type.
-	if apptID, ok := b.awaiting.take(senderID(c), now); ok {
-		return b.applyReschedule(c, apptID, text, now)
+	// If this user just tapped a field-edit button, their next message is the new
+	// value for that visit (time/title/who) — handled in any chat type.
+	if apptID, field, ok := b.awaiting.take(senderID(c), now); ok {
+		return b.applyEdit(c, apptID, field, text, now)
 	}
 
 	// In groups the bot must not run every message through Gemini — capture is
@@ -177,18 +156,23 @@ func (b *Bot) formatParsed(p parse.Parsed) string {
 	return line
 }
 
-func (b *Bot) formatAppt(a model.Appointment) string {
+// whenLabel renders an appointment's start as "пн 8 июл, 10:30" (falls back to
+// the raw stored value if it can't be parsed).
+func (b *Bot) whenLabel(a model.Appointment) string {
 	t, err := a.Start(b.cfg.Loc)
-	when := a.StartsAt
-	if err == nil {
-		when = fmt.Sprintf("%s %d %s, %02d:%02d",
-			weekdaysShortRU[int(t.Weekday())], t.Day(), monthsRU[int(t.Month())], t.Hour(), t.Minute())
+	if err != nil {
+		return a.StartsAt
 	}
+	return fmt.Sprintf("%s %d %s, %02d:%02d",
+		weekdaysShortRU[int(t.Weekday())], t.Day(), monthsRU[int(t.Month())], t.Hour(), t.Minute())
+}
+
+func (b *Bot) formatAppt(a model.Appointment) string {
 	who := ""
 	if a.Person != "" {
 		who = " · " + a.Person
 	}
-	return fmt.Sprintf("📌 <b>%s</b> — %s%s", a.Title, when, who)
+	return fmt.Sprintf("📌 <b>%s</b> — %s%s", a.Title, b.whenLabel(a), who)
 }
 
 func (b *Bot) formatList(items []model.Appointment) string {
@@ -225,8 +209,8 @@ func (b *Bot) groupAddText(c tele.Context, items []model.Appointment) string {
 	return head + byLine(c) + ":\n\n" + b.formatList(items)
 }
 
-func (b *Bot) groupUpdateText(c tele.Context, a model.Appointment) string {
-	return "🔄 Визит перенесён" + byLine(c) + ":\n" + b.formatAppt(a)
+func (b *Bot) groupChangeText(c tele.Context, a model.Appointment, verb string) string {
+	return "🔄 Визит " + verb + byLine(c) + ":\n" + b.formatAppt(a)
 }
 
 func (b *Bot) groupCancelText(c tele.Context, a model.Appointment) string {
@@ -241,6 +225,18 @@ func byLine(c tele.Context) string {
 	return ""
 }
 
+// applyEdit routes a follow-up text message to the field the user chose to edit.
+func (b *Bot) applyEdit(c tele.Context, apptID int64, field, text string, now time.Time) error {
+	switch field {
+	case "title":
+		return b.applyFieldEdit(c, apptID, field, text, b.store.UpdateTitle)
+	case "who":
+		return b.applyFieldEdit(c, apptID, field, text, b.store.UpdatePerson)
+	default: // time
+		return b.applyReschedule(c, apptID, text, now)
+	}
+}
+
 // applyReschedule parses a datetime from text and moves the appointment.
 func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -249,7 +245,7 @@ func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now tim
 	when, _, err := b.parser.ParseWhen(ctx, text, now)
 	if err != nil {
 		b.logger.Error("bot: parse when", "err", err)
-		b.awaiting.set(senderID(c), apptID, now) // keep it, let the user retry
+		b.awaiting.set(senderID(c), apptID, "time", now) // keep it, let the user retry
 		return c.Send("Не понял дату. Напиши, например: в пятницу 17:00")
 	}
 	if err := b.store.Reschedule(apptID, when.Format(model.LocalDatetime)); err != nil {
@@ -260,8 +256,22 @@ func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now tim
 	if err != nil {
 		return c.Send("Перенёс, но не смог показать 🤔")
 	}
-	b.mirrorToGroup(c, b.groupUpdateText(c, a))
+	b.mirrorToGroup(c, b.groupChangeText(c, a, "перенесён"))
 	return c.Send("✅ Перенесено:\n"+b.formatAppt(a), tele.ModeHTML)
+}
+
+// applyFieldEdit writes a free-text field (title/person) and echoes the result.
+func (b *Bot) applyFieldEdit(c tele.Context, apptID int64, field, value string, update func(int64, string) error) error {
+	if err := update(apptID, value); err != nil {
+		b.logger.Error("bot: edit field", "err", err, "id", apptID, "field", field)
+		return c.Send("Не удалось изменить 😕")
+	}
+	a, err := b.store.Get(apptID)
+	if err != nil {
+		return c.Send("Изменил, но не смог показать 🤔")
+	}
+	b.mirrorToGroup(c, b.groupChangeText(c, a, "изменён"))
+	return c.Send("✅ Изменено:\n"+b.formatAppt(a), tele.ModeHTML)
 }
 
 // senderID is the message author's Telegram id (0 if unknown).

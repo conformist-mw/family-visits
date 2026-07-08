@@ -113,6 +113,22 @@ func (s *Store) Reschedule(id int64, newStart string) error {
 	return err
 }
 
+// UpdateTitle renames an appointment and bumps updated_at.
+func (s *Store) UpdateTitle(id int64, title string) error {
+	_, err := s.db.Exec(`
+		UPDATE appointments SET title = ?, updated_at = `+nowExpr+`
+		WHERE id = ?`, title, id)
+	return err
+}
+
+// UpdatePerson changes the "who" of an appointment and bumps updated_at.
+func (s *Store) UpdatePerson(id int64, person string) error {
+	_, err := s.db.Exec(`
+		UPDATE appointments SET person = ?, updated_at = `+nowExpr+`
+		WHERE id = ?`, person, id)
+	return err
+}
+
 // ActiveFrom returns non-cancelled, non-deleted appointments starting at or
 // after `from` (LocalDatetime), soonest first — the source for the ICS feed.
 func (s *Store) ActiveFrom(from string) ([]model.Appointment, error) {

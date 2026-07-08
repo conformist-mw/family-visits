@@ -104,15 +104,18 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 
 	tb.Handle(&tele.Btn{Unique: "appt_save"}, bot.onSave)
 	tb.Handle(&tele.Btn{Unique: "appt_cancel"}, bot.onCancel)
-	tb.Handle(&tele.Btn{Unique: "appt_resched"}, bot.onReschedule)
-	tb.Handle(&tele.Btn{Unique: "appt_del"}, bot.onCancelAppt)
+
+	// Interactive /list: one self-editing message navigated entirely via these.
+	tb.Handle(&tele.Btn{Unique: "lst_nav"}, bot.onNav)
+	tb.Handle(&tele.Btn{Unique: "lst_arm"}, bot.onArm)
+	tb.Handle(&tele.Btn{Unique: "lst_del"}, bot.onDel)
 
 	// Populate the "/" command menu (best-effort; a network hiccup here must
 	// not block startup).
 	if err := tb.SetCommands([]tele.Command{
 		{Text: "visit", Description: "Добавить визит: /visit завтра 15:00 педикюр"},
 		{Text: "week", Description: "Что на ближайшую неделю"},
-		{Text: "list", Description: "Все визиты (перенос/отмена)"},
+		{Text: "list", Description: "Визиты по неделям: перенос, правка, отмена"},
 		{Text: "help", Description: "Как пользоваться"},
 	}); err != nil {
 		logger.Warn("bot: set commands", "err", err)
