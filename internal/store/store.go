@@ -129,6 +129,15 @@ func (s *Store) UpdatePerson(id int64, person string) error {
 	return err
 }
 
+// ActiveAt returns non-cancelled, non-deleted appointments with exactly this
+// start (LocalDatetime) — a small set used to warn about duplicate captures.
+// Title/person matching is left to the caller so it can fold Unicode case.
+func (s *Store) ActiveAt(startsAt string) ([]model.Appointment, error) {
+	return s.query(selectCols+`
+		WHERE deleted_at IS NULL AND status != ? AND starts_at = ?`,
+		model.StatusCancelled, startsAt)
+}
+
 // ActiveFrom returns non-cancelled, non-deleted appointments starting at or
 // after `from` (LocalDatetime), soonest first — the source for the ICS feed.
 func (s *Store) ActiveFrom(from string) ([]model.Appointment, error) {

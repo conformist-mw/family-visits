@@ -123,11 +123,40 @@ func commandPayload(text string) string {
 func (b *Bot) confirmText(parsed []parse.Parsed) string {
 	var sb strings.Builder
 	sb.WriteString("Нашёл, сохранить?\n\n")
+	anyDup := false
 	for _, p := range parsed {
-		sb.WriteString(b.formatParsed(p))
+		line := b.formatAppt(p.Appointment)
+		if p.Confidence == "low" {
+			line += " ⚠️"
+		}
+		if b.isDuplicate(p.Appointment) {
+			line += " ⚠️ уже есть"
+			anyDup = true
+		}
+		sb.WriteString(line)
 		sb.WriteByte('\n')
 	}
+	if anyDup {
+		sb.WriteString("\nПохоже, что-то уже записано — если это дубль, жми «Отмена».")
+	}
 	return sb.String()
+}
+
+// isDuplicate reports whether an active visit with the same start, title and
+// person already exists. Case-insensitive on title/person (Unicode-aware).
+func (b *Bot) isDuplicate(a model.Appointment) bool {
+	rows, err := b.store.ActiveAt(a.StartsAt)
+	if err != nil {
+		b.logger.Warn("bot: duplicate check", "err", err)
+		return false
+	}
+	for _, r := range rows {
+		if strings.EqualFold(strings.TrimSpace(r.Title), strings.TrimSpace(a.Title)) &&
+			strings.EqualFold(strings.TrimSpace(r.Person), strings.TrimSpace(a.Person)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *Bot) confirmMarkup(key string, n int) *tele.ReplyMarkup {
@@ -147,14 +176,6 @@ var monthsRU = [...]string{
 }
 
 var weekdaysShortRU = [7]string{"вс", "пн", "вт", "ср", "чт", "пт", "сб"}
-
-func (b *Bot) formatParsed(p parse.Parsed) string {
-	line := b.formatAppt(p.Appointment)
-	if p.Confidence == "low" {
-		line += " ⚠️"
-	}
-	return line
-}
 
 // whenLabel renders an appointment's start as "пн 8 июл, 10:30" (falls back to
 // the raw stored value if it can't be parsed).
