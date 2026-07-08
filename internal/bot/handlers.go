@@ -98,8 +98,32 @@ func (b *Bot) captureText(c tele.Context, text string, now time.Time) error {
 	// the parser can't know who sent the message, so we resolve it here.
 	resolvePerson(parsed, senderName(c))
 
-	key := b.pending.put(parsed, now)
-	return c.Send(b.confirmText(parsed), b.confirmMarkup(key, len(parsed)), tele.ModeHTML)
+	// If exactly one visit already sits at this time (single-item capture), offer
+	// to update it instead of silently creating a second entry.
+	var updateID int64
+	if len(parsed) == 1 {
+		if id, ok := b.existingAt(parsed[0].Appointment.StartsAt); ok {
+			updateID = id
+		}
+	}
+
+	key := b.pending.put(parsed, updateID, now)
+	return c.Send(b.confirmText(parsed, updateID), b.confirmMarkup(key, len(parsed), updateID), tele.ModeHTML)
+}
+
+// existingAt returns the id of the sole active visit at startsAt, if there is
+// exactly one — the candidate to update on a same-time capture. Zero/many
+// matches mean "no unambiguous update", so we fall back to plain save.
+func (b *Bot) existingAt(startsAt string) (int64, bool) {
+	rows, err := b.store.ActiveAt(startsAt)
+	if err != nil {
+		b.logger.Warn("bot: same-time check", "err", err)
+		return 0, false
+	}
+	if len(rows) == 1 {
+		return rows[0].ID, true
+	}
+	return 0, false
 }
 
 func isPrivate(c tele.Context) bool {
@@ -120,47 +144,54 @@ func commandPayload(text string) string {
 	return strings.TrimSpace(text[i+1:])
 }
 
-func (b *Bot) confirmText(parsed []parse.Parsed) string {
+func (b *Bot) confirmText(parsed []parse.Parsed, updateID int64) string {
+	if updateID > 0 && len(parsed) == 1 {
+		return b.confirmUpdateText(parsed[0], updateID)
+	}
 	var sb strings.Builder
 	sb.WriteString("Нашёл, сохранить?\n\n")
-	anyDup := false
 	for _, p := range parsed {
 		line := b.formatAppt(p.Appointment)
 		if p.Confidence == "low" {
 			line += " ⚠️"
 		}
-		if b.isDuplicate(p.Appointment) {
-			line += " ⚠️ уже есть"
-			anyDup = true
-		}
 		sb.WriteString(line)
 		sb.WriteByte('\n')
-	}
-	if anyDup {
-		sb.WriteString("\nПохоже, что-то уже записано — если это дубль, жми «Отмена».")
 	}
 	return sb.String()
 }
 
-// isDuplicate reports whether an active visit with the same start, title and
-// person already exists. Case-insensitive on title/person (Unicode-aware).
-func (b *Bot) isDuplicate(a model.Appointment) bool {
-	rows, err := b.store.ActiveAt(a.StartsAt)
-	if err != nil {
-		b.logger.Warn("bot: duplicate check", "err", err)
-		return false
+// confirmUpdateText frames a same-time collision: the existing visit vs. the
+// newly parsed one, with a choice to update or add as a second entry.
+func (b *Bot) confirmUpdateText(p parse.Parsed, updateID int64) string {
+	var sb strings.Builder
+	sb.WriteString("⚠️ На это время уже есть визит:\n")
+	if ex, err := b.store.Get(updateID); err == nil {
+		sb.WriteString(b.formatAppt(ex))
+		sb.WriteByte('\n')
 	}
-	for _, r := range rows {
-		if strings.EqualFold(strings.TrimSpace(r.Title), strings.TrimSpace(a.Title)) &&
-			strings.EqualFold(strings.TrimSpace(r.Person), strings.TrimSpace(a.Person)) {
-			return true
-		}
+	sb.WriteString("\nНовое:\n")
+	line := b.formatAppt(p.Appointment)
+	if p.Confidence == "low" {
+		line += " ⚠️"
 	}
-	return false
+	sb.WriteString(line)
+	sb.WriteString("\n\nОбновить существующий или сохранить как новый?")
+	return sb.String()
 }
 
-func (b *Bot) confirmMarkup(key string, n int) *tele.ReplyMarkup {
+func (b *Bot) confirmMarkup(key string, n int, updateID int64) *tele.ReplyMarkup {
 	m := &tele.ReplyMarkup{}
+	if updateID > 0 {
+		m.Inline(
+			m.Row(
+				m.Data("🔄 Обновить", "appt_update", key),
+				m.Data("✅ Сохранить как новый", "appt_save", key),
+			),
+			m.Row(m.Data("✗ Отмена", "appt_cancel", key)),
+		)
+		return m
+	}
 	m.Inline(m.Row(
 		m.Data(fmt.Sprintf("✅ Сохранить (%d)", n), "appt_save", key),
 		m.Data("✗ Отмена", "appt_cancel", key),

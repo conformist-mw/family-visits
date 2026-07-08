@@ -129,6 +129,15 @@ func (s *Store) UpdatePerson(id int64, person string) error {
 	return err
 }
 
+// UpdateDetails overwrites title and person in one shot (start time stays) —
+// used when confirming an update onto an existing same-time visit.
+func (s *Store) UpdateDetails(id int64, title, person string) error {
+	_, err := s.db.Exec(`
+		UPDATE appointments SET title = ?, person = ?, updated_at = `+nowExpr+`
+		WHERE id = ?`, title, person, id)
+	return err
+}
+
 // ActiveAt returns non-cancelled, non-deleted appointments with exactly this
 // start (LocalDatetime) — a small set used to warn about duplicate captures.
 // Title/person matching is left to the caller so it can fold Unicode case.

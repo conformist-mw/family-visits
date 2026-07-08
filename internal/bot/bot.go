@@ -103,6 +103,7 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 	tb.Handle(tele.OnText, bot.onText)
 
 	tb.Handle(&tele.Btn{Unique: "appt_save"}, bot.onSave)
+	tb.Handle(&tele.Btn{Unique: "appt_update"}, bot.onUpdate)
 	tb.Handle(&tele.Btn{Unique: "appt_cancel"}, bot.onCancel)
 
 	// Interactive /list: one self-editing message navigated entirely via these.
