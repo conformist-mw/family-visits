@@ -34,6 +34,7 @@ func (b *Bot) onSave(c tele.Context) error {
 	sb.WriteString("✅ Сохранено:\n\n")
 	sb.WriteString(b.formatList(saved))
 	_ = c.Respond()
+	b.mirrorToGroup(c, b.groupAddText(c, saved))
 	return c.Edit(sb.String(), tele.ModeHTML)
 }
 
@@ -81,5 +82,6 @@ func (b *Bot) onCancelAppt(c tele.Context) error {
 		return nil
 	}
 	_ = c.Respond()
+	b.mirrorToGroup(c, b.groupCancelText(c, a))
 	return c.Edit("✗ Отменено: "+b.formatAppt(a), tele.ModeHTML)
 }

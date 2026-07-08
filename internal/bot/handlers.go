@@ -201,6 +201,46 @@ func (b *Bot) formatList(items []model.Appointment) string {
 
 func (b *Bot) now() time.Time { return time.Now().In(b.cfg.Loc) }
 
+// ── group mirror ─────────────────────────────────────────────────────────────
+
+// mirrorToGroup echoes a private-chat add/update/cancel into the family group,
+// so the group stays the shared source of truth even when someone captures a
+// visit in a 1:1 chat with the bot. It's a no-op in the group itself (the
+// action's confirmation card is already visible there, so mirroring would
+// double-post) and when no notify chat is configured.
+func (b *Bot) mirrorToGroup(c tele.Context, text string) {
+	if !isPrivate(c) || b.cfg.NotifyChat == 0 {
+		return
+	}
+	if _, err := b.b.Send(tele.ChatID(b.cfg.NotifyChat), text, tele.ModeHTML); err != nil {
+		b.logger.Error("bot: mirror to group", "err", err)
+	}
+}
+
+func (b *Bot) groupAddText(c tele.Context, items []model.Appointment) string {
+	head := "🆕 Новый визит"
+	if len(items) > 1 {
+		head = "🆕 Новые визиты"
+	}
+	return head + byLine(c) + ":\n\n" + b.formatList(items)
+}
+
+func (b *Bot) groupUpdateText(c tele.Context, a model.Appointment) string {
+	return "🔄 Визит перенесён" + byLine(c) + ":\n" + b.formatAppt(a)
+}
+
+func (b *Bot) groupCancelText(c tele.Context, a model.Appointment) string {
+	return "✗ Визит отменён" + byLine(c) + ":\n" + b.formatAppt(a)
+}
+
+// byLine attributes a group notification to whoever made the change.
+func byLine(c tele.Context) string {
+	if who := senderName(c); who != "" {
+		return " (" + who + ")"
+	}
+	return ""
+}
+
 // applyReschedule parses a datetime from text and moves the appointment.
 func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -220,6 +260,7 @@ func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now tim
 	if err != nil {
 		return c.Send("Перенёс, но не смог показать 🤔")
 	}
+	b.mirrorToGroup(c, b.groupUpdateText(c, a))
 	return c.Send("✅ Перенесено:\n"+b.formatAppt(a), tele.ModeHTML)
 }
 
