@@ -25,8 +25,11 @@ digest and a weekly "this week" digest to the family group.
 - **Dates**: no year needed — relative and bare dates resolve to the nearest
   future in `APP_TZ`.
 - **Query**: `/week` (next 7 days), `/list` (all upcoming).
-- **Digests**: minute-resolution scheduler fires `DAILY_DIGEST_TIME` and the
-  weekly digest at `WEEKLY_DIGEST_DOW`/`WEEKLY_DIGEST_TIME`.
+- **Digests**: off by default. Set `NOTIFICATIONS_ENABLED=true` to turn on the
+  minute-resolution scheduler, which then fires `DAILY_DIGEST_TIME` and the
+  weekly digest at `WEEKLY_DIGEST_DOW`/`WEEKLY_DIGEST_TIME`. Left off, Home
+  Assistant's Remote Calendar (reading the ICS feed) owns the summaries and the
+  app won't double-post. Interactive bot replies are unaffected either way.
 - **Storage**: SQLite is the source of truth. Columns `ha_uid` / `ha_synced_at`
   / `updated_at` are in place for a later Home Assistant calendar exporter
   (outbox pattern) — no schema change needed to add it.

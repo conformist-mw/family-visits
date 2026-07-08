@@ -13,6 +13,10 @@ import (
 // their configured wall-clock times (in cfg.Loc). It blocks until ctx is
 // done; meant to run in its own goroutine alongside polling/webhook.
 func (b *Bot) RunScheduler(ctx context.Context) {
+	if !b.cfg.NotificationsEnabled {
+		b.logger.Info("bot: scheduler disabled (NOTIFICATIONS_ENABLED not set)")
+		return
+	}
 	if b.cfg.NotifyChat == 0 {
 		b.logger.Info("bot: scheduler disabled (no notify chat)")
 		return

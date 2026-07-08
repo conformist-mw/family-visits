@@ -23,6 +23,13 @@ type Config struct {
 	AllowedChats  []int64
 	NotifyChat    int64 // where digests are pushed; 0 disables the scheduler
 
+	// NotificationsEnabled gates the scheduled digests (daily/weekly). Default
+	// false: opt-in, so the app stays quiet unless explicitly turned on. Home
+	// Assistant owns the morning/weekly summaries by default (its Remote
+	// Calendar reads this app's ICS feed), so leaving this off avoids sending
+	// the family group a duplicate message.
+	NotificationsEnabled bool
+
 	Loc              *time.Location
 	DailyDigestTime  string // "HH:MM" in Loc; "" disables
 	WeeklyDigestDOW  int    // 0=Sun..6=Sat; <0 disables

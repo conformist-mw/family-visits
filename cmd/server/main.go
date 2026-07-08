@@ -70,15 +70,16 @@ func main() {
 
 		notifyChat, _ := strconv.ParseInt(os.Getenv("TELEGRAM_NOTIFY_CHAT"), 10, 64)
 		cfg := bot.Config{
-			Token:            token,
-			WebhookURL:       os.Getenv("TELEGRAM_WEBHOOK_URL"),
-			WebhookSecret:    os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
-			AllowedChats:     bot.ParseChatIDs(os.Getenv("TELEGRAM_ALLOWED_CHATS"), logger),
-			NotifyChat:       notifyChat,
-			Loc:              loc,
-			DailyDigestTime:  os.Getenv("DAILY_DIGEST_TIME"),
-			WeeklyDigestDOW:  parseDOW(os.Getenv("WEEKLY_DIGEST_DOW")),
-			WeeklyDigestTime: os.Getenv("WEEKLY_DIGEST_TIME"),
+			Token:                token,
+			WebhookURL:           os.Getenv("TELEGRAM_WEBHOOK_URL"),
+			WebhookSecret:        os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
+			AllowedChats:         bot.ParseChatIDs(os.Getenv("TELEGRAM_ALLOWED_CHATS"), logger),
+			NotifyChat:           notifyChat,
+			NotificationsEnabled: parseBool(os.Getenv("NOTIFICATIONS_ENABLED")),
+			Loc:                  loc,
+			DailyDigestTime:      os.Getenv("DAILY_DIGEST_TIME"),
+			WeeklyDigestDOW:      parseDOW(os.Getenv("WEEKLY_DIGEST_DOW")),
+			WeeklyDigestTime:     os.Getenv("WEEKLY_DIGEST_TIME"),
 		}
 		vbot, err := bot.New(cfg, st, parser, logger)
 		if err != nil {
@@ -166,6 +167,18 @@ func parseDOW(s string) int {
 		return -1
 	}
 	return n
+}
+
+// parseBool reports whether s is a truthy value (1/t/true/yes/on, any case).
+// Anything else — including empty/unset — is false, so notifications stay
+// opt-in.
+func parseBool(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "1", "t", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func splitCSV(s string) []string {
