@@ -14,7 +14,7 @@ import (
 // The /list UI is a single self-editing message. It shows one calendar week of
 // visits at a time (Mon–Sun; the current week starts at today) and pages
 // forward/back by week. Tapping a numbered visit morphs the same message into
-// its card → edit sub-menu / cancel confirmation, and "← К списку" morphs it
+// its card → edit sub-menu / cancel confirmation, and "← До списку" morphs it
 // back. All navigation state lives in the callback data, so there's no
 // server-side session to track.
 
@@ -50,11 +50,11 @@ func (b *Bot) listView(offset int) (string, *tele.ReplyMarkup, bool, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("📋 Визиты · ")
+	sb.WriteString("📋 Візити · ")
 	sb.WriteString(weekLabel(from, winEnd))
 	sb.WriteString("\n\n")
 	if len(items) == 0 {
-		sb.WriteString("На этой неделе визитов нет.")
+		sb.WriteString("На цьому тижні візитів немає.")
 	} else {
 		for i, a := range items {
 			sb.WriteString(b.formatListLine(i+1, a))
@@ -73,10 +73,10 @@ func (b *Bot) listView(offset int) (string, *tele.ReplyMarkup, bool, error) {
 
 	var navRow []tele.Btn
 	if offset > 0 {
-		navRow = append(navRow, m.Data("◀ Пред. неделя", "lst_nav", "week:"+strconv.Itoa(offset-1)))
+		navRow = append(navRow, m.Data("◀ Попер. тиждень", "lst_nav", "week:"+strconv.Itoa(offset-1)))
 	}
 	if hasNext {
-		navRow = append(navRow, m.Data("След. неделя ▶", "lst_nav", "week:"+strconv.Itoa(offset+1)))
+		navRow = append(navRow, m.Data("Наст. тиждень ▶", "lst_nav", "week:"+strconv.Itoa(offset+1)))
 	}
 	if len(navRow) > 0 {
 		rows = append(rows, m.Row(navRow...))
@@ -107,7 +107,7 @@ func (b *Bot) onNav(c tele.Context) error {
 		}
 		return c.Edit(b.formatAppt(a), b.editMarkup(a.ID, offset), tele.ModeHTML)
 	case "cancel":
-		return c.Edit("Отменить визит?\n"+b.formatAppt(a), b.cancelMarkup(a.ID, offset), tele.ModeHTML)
+		return c.Edit("Скасувати візит?\n"+b.formatAppt(a), b.cancelMarkup(a.ID, offset), tele.ModeHTML)
 	default: // card
 		return c.Edit(b.formatAppt(a), b.cardMarkup(a.ID, offset, private), tele.ModeHTML)
 	}
@@ -121,7 +121,7 @@ func (b *Bot) onArm(c tele.Context) error {
 	// group any member (or bot) can post at any moment and would be captured, so
 	// arming is restricted to private chats.
 	if !isPrivate(c) {
-		return c.Respond(&tele.CallbackResponse{Text: "Правки визитов — в личке со мной 🙏", ShowAlert: true})
+		return c.Respond(&tele.CallbackResponse{Text: "Правки візитів — у приватці зі мною 🙏", ShowAlert: true})
 	}
 	field, arg := splitData(c.Data())
 	id, err := strconv.ParseInt(arg, 10, 64)
@@ -139,7 +139,7 @@ func (b *Bot) onArm(c tele.Context) error {
 	return c.Send(armPrompt(field, a))
 }
 
-// onDel soft-cancels the visit behind a confirmed "Да, отменить" tap.
+// onDel soft-cancels the visit behind a confirmed "Так, скасувати" tap.
 func (b *Bot) onDel(c tele.Context) error {
 	id, err := strconv.ParseInt(c.Data(), 10, 64)
 	if err != nil {
@@ -153,22 +153,22 @@ func (b *Bot) onDel(c tele.Context) error {
 	}
 	if err := b.store.SetStatus(id, model.StatusCancelled); err != nil {
 		b.logger.Error("bot: cancel appointment", "err", err, "id", id)
-		_ = c.Respond(&tele.CallbackResponse{Text: "Не удалось отменить 😕", ShowAlert: true})
+		_ = c.Respond(&tele.CallbackResponse{Text: "Не вдалося скасувати 😕", ShowAlert: true})
 		return nil
 	}
 	_ = c.Respond()
 	b.mirrorToGroup(c, b.groupCancelText(c, a))
-	return c.Edit("✗ Отменено: "+b.formatAppt(a), tele.ModeHTML)
+	return c.Edit("✗ Скасовано: "+b.formatAppt(a), tele.ModeHTML)
 }
 
 func (b *Bot) editToList(c tele.Context, offset int) error {
 	text, markup, empty, err := b.listView(offset)
 	if err != nil {
 		b.logger.Error("bot: list view", "err", err)
-		return c.Edit("Не смог достать список 😕")
+		return c.Edit("Не вдалося дістати список 😕")
 	}
 	if empty {
-		return c.Edit("Будущих визитов нет.")
+		return c.Edit("Майбутніх візитів немає.")
 	}
 	return c.Edit(text, markup, tele.ModeHTML)
 }
@@ -179,12 +179,12 @@ func (b *Bot) cardMarkup(id int64, offset int, private bool) *tele.ReplyMarkup {
 	m := &tele.ReplyMarkup{}
 	ids := strconv.FormatInt(id, 10)
 	ref := ids + ":" + strconv.Itoa(offset)
-	back := m.Row(m.Data("← К списку", "lst_nav", "week:"+strconv.Itoa(offset)))
+	back := m.Row(m.Data("← До списку", "lst_nav", "week:"+strconv.Itoa(offset)))
 	if !private {
 		// In groups, the text-driven edits (Перенести/Изменить) are disabled —
 		// only the button-only cancel is safe from stray messages being captured.
 		m.Inline(
-			m.Row(m.Data("✗ Отменить", "lst_nav", "cancel:"+ref)),
+			m.Row(m.Data("✗ Скасувати", "lst_nav", "cancel:"+ref)),
 			back,
 		)
 		return m
@@ -192,8 +192,8 @@ func (b *Bot) cardMarkup(id int64, offset int, private bool) *tele.ReplyMarkup {
 	m.Inline(
 		m.Row(
 			m.Data("→ Перенести", "lst_arm", "time:"+ids),
-			m.Data("✎ Изменить", "lst_nav", "edit:"+ref),
-			m.Data("✗ Отменить", "lst_nav", "cancel:"+ref),
+			m.Data("✎ Змінити", "lst_nav", "edit:"+ref),
+			m.Data("✗ Скасувати", "lst_nav", "cancel:"+ref),
 		),
 		back,
 	)
@@ -205,9 +205,9 @@ func (b *Bot) editMarkup(id int64, offset int) *tele.ReplyMarkup {
 	ids := strconv.FormatInt(id, 10)
 	m.Inline(
 		m.Row(
-			m.Data("🕑 Время", "lst_arm", "time:"+ids),
-			m.Data("✏️ Название", "lst_arm", "title:"+ids),
-			m.Data("👤 Кто", "lst_arm", "who:"+ids),
+			m.Data("🕑 Час", "lst_arm", "time:"+ids),
+			m.Data("✏️ Назва", "lst_arm", "title:"+ids),
+			m.Data("👤 Хто", "lst_arm", "who:"+ids),
 		),
 		m.Row(m.Data("← Назад", "lst_nav", "card:"+ids+":"+strconv.Itoa(offset))),
 	)
@@ -218,7 +218,7 @@ func (b *Bot) cancelMarkup(id int64, offset int) *tele.ReplyMarkup {
 	m := &tele.ReplyMarkup{}
 	ids := strconv.FormatInt(id, 10)
 	m.Inline(m.Row(
-		m.Data("✗ Да, отменить", "lst_del", ids),
+		m.Data("✗ Так, скасувати", "lst_del", ids),
 		m.Data("← Назад", "lst_nav", "card:"+ids+":"+strconv.Itoa(offset)),
 	))
 	return m
@@ -237,15 +237,15 @@ func (b *Bot) formatListLine(n int, a model.Appointment) string {
 func armPrompt(field string, a model.Appointment) string {
 	switch field {
 	case "title":
-		return fmt.Sprintf("Изменить название «%s». Напиши новое название.", a.Title)
+		return fmt.Sprintf("Змінити назву «%s». Напиши нову назву.", a.Title)
 	case "who":
 		cur := a.Person
 		if cur == "" {
-			cur = "не указан"
+			cur = "не вказано"
 		}
-		return fmt.Sprintf("Для кого «%s» (сейчас: %s)? Напиши имя.", a.Title, cur)
+		return fmt.Sprintf("Для кого «%s» (зараз: %s)? Напиши ім’я.", a.Title, cur)
 	default: // time
-		return fmt.Sprintf("Перенос «%s». Напиши новую дату и время — например: в пятницу 17:00", a.Title)
+		return fmt.Sprintf("Перенесення «%s». Напиши нову дату й час — наприклад: у п’ятницю 17:00", a.Title)
 	}
 }
 
@@ -258,14 +258,14 @@ func weekWindow(now time.Time, offset int) (time.Time, time.Time) {
 	return start, start.AddDate(0, 0, 7)
 }
 
-// weekLabel is a compact "8–13 июл" / "28 июл – 3 авг" range for the header.
+// weekLabel is a compact "8–13 лип" / "28 лип – 3 сер" range for the header.
 func weekLabel(from, winEnd time.Time) string {
 	last := winEnd.AddDate(0, 0, -1)
 	if from.Month() == last.Month() {
-		return fmt.Sprintf("%d–%d %s", from.Day(), last.Day(), monthsRU[int(last.Month())])
+		return fmt.Sprintf("%d–%d %s", from.Day(), last.Day(), monthsShort[int(last.Month())])
 	}
 	return fmt.Sprintf("%d %s – %d %s",
-		from.Day(), monthsRU[int(from.Month())], last.Day(), monthsRU[int(last.Month())])
+		from.Day(), monthsShort[int(from.Month())], last.Day(), monthsShort[int(last.Month())])
 }
 
 func chunkButtons(m *tele.ReplyMarkup, btns []tele.Btn, per int) []tele.Row {

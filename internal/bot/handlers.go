@@ -12,21 +12,21 @@ import (
 	"visits/internal/parse"
 )
 
-const startText = `Привет! Я веду семейные визиты (маникюр, ортодонт, врачи…).
+const startText = `Привіт! Я веду сімейні візити (манікюр, ортодонт, лікарі…).
 
-Добавить — командой /visit и текстом, можно несколько строк:
+Додати — командою /visit і текстом, можна кілька рядків:
 /visit 8.07 11:30 Педикюр Олежа
 /visit завтра 15:00 ортодонт
 
-Если «кто» не указан — подставлю того, кто написал.
+Якщо «хто» не вказано — підставлю того, хто написав.
 
-Команды:
-/visit — добавить визит
-/week — что на ближайшую неделю
-/list — визиты по неделям (перенос, правка, отмена)
-/help — эта справка
+Команди:
+/visit — додати візит
+/week — що на найближчий тиждень
+/list — візити по тижнях (перенесення, правка, скасування)
+/help — ця довідка
 
-(В личке со мной можно писать визиты и без /visit.)`
+(У приватці зі мною можна писати візити й без /visit.)`
 
 func (b *Bot) cmdStart(c tele.Context) error {
 	return c.Send(startText)
@@ -37,7 +37,7 @@ func (b *Bot) cmdStart(c tele.Context) error {
 func (b *Bot) cmdVisit(c tele.Context) error {
 	text := commandPayload(c.Text())
 	if text == "" {
-		return c.Send("Напиши визит после команды, например:\n/visit завтра 15:00 педикюр")
+		return c.Send("Напиши візит після команди, наприклад:\n/visit завтра 15:00 педикюр")
 	}
 	return b.captureText(c, text, b.now())
 }
@@ -46,10 +46,10 @@ func (b *Bot) cmdList(c tele.Context) error {
 	text, markup, empty, err := b.listView(0)
 	if err != nil {
 		b.logger.Error("bot: list view", "err", err)
-		return c.Send("Не смог достать список 😕")
+		return c.Send("Не вдалося дістати список 😕")
 	}
 	if empty {
-		return c.Send("Будущих визитов нет.")
+		return c.Send("Майбутніх візитів немає.")
 	}
 	return c.Send(text, markup, tele.ModeHTML)
 }
@@ -88,10 +88,10 @@ func (b *Bot) captureText(c tele.Context, text string, now time.Time) error {
 	parsed, err := b.parser.Parse(ctx, text, now)
 	if err != nil {
 		b.logger.Error("bot: parse", "err", err)
-		return c.Send("Не смог разобрать текст 😕 Попробуй ещё раз.")
+		return c.Send("Не вдалося розібрати текст 😕 Спробуй ще раз.")
 	}
 	if len(parsed) == 0 {
-		return c.Send("Не нашёл визитов. Пример: /visit 8.07 11:30 Педикюр Олежа")
+		return c.Send("Не знайшов візитів. Приклад: /visit 8.07 11:30 Педикюр Олежа")
 	}
 
 	// Unspecified (or self-referential) "who" defaults to the message sender —
@@ -149,7 +149,7 @@ func (b *Bot) confirmText(parsed []parse.Parsed, updateID int64) string {
 		return b.confirmUpdateText(parsed[0], updateID)
 	}
 	var sb strings.Builder
-	sb.WriteString("Нашёл, сохранить?\n\n")
+	sb.WriteString("Знайшов, зберегти?\n\n")
 	for _, p := range parsed {
 		line := b.formatAppt(p.Appointment)
 		if p.Confidence == "low" {
@@ -165,18 +165,18 @@ func (b *Bot) confirmText(parsed []parse.Parsed, updateID int64) string {
 // newly parsed one, with a choice to update or add as a second entry.
 func (b *Bot) confirmUpdateText(p parse.Parsed, updateID int64) string {
 	var sb strings.Builder
-	sb.WriteString("⚠️ На это время уже есть визит:\n")
+	sb.WriteString("⚠️ На цей час уже є візит:\n")
 	if ex, err := b.store.Get(updateID); err == nil {
 		sb.WriteString(b.formatAppt(ex))
 		sb.WriteByte('\n')
 	}
-	sb.WriteString("\nНовое:\n")
+	sb.WriteString("\nНове:\n")
 	line := b.formatAppt(p.Appointment)
 	if p.Confidence == "low" {
 		line += " ⚠️"
 	}
 	sb.WriteString(line)
-	sb.WriteString("\n\nОбновить существующий или сохранить как новый?")
+	sb.WriteString("\n\nОновити наявний чи зберегти як новий?")
 	return sb.String()
 }
 
@@ -185,30 +185,30 @@ func (b *Bot) confirmMarkup(key string, n int, updateID int64) *tele.ReplyMarkup
 	if updateID > 0 {
 		m.Inline(
 			m.Row(
-				m.Data("🔄 Обновить", "appt_update", key),
-				m.Data("✅ Сохранить как новый", "appt_save", key),
+				m.Data("🔄 Оновити", "appt_update", key),
+				m.Data("✅ Зберегти як новий", "appt_save", key),
 			),
-			m.Row(m.Data("✗ Отмена", "appt_cancel", key)),
+			m.Row(m.Data("✗ Скасувати", "appt_cancel", key)),
 		)
 		return m
 	}
 	m.Inline(m.Row(
-		m.Data(fmt.Sprintf("✅ Сохранить (%d)", n), "appt_save", key),
-		m.Data("✗ Отмена", "appt_cancel", key),
+		m.Data(fmt.Sprintf("✅ Зберегти (%d)", n), "appt_save", key),
+		m.Data("✗ Скасувати", "appt_cancel", key),
 	))
 	return m
 }
 
 // ── formatting ───────────────────────────────────────────────────────────────
 
-var monthsRU = [...]string{
-	"", "янв", "фев", "мар", "апр", "мая", "июн",
-	"июл", "авг", "сен", "окт", "ноя", "дек",
+var monthsShort = [...]string{
+	"", "січ", "лют", "бер", "кві", "тра", "чер",
+	"лип", "сер", "вер", "жов", "лис", "гру",
 }
 
-var weekdaysShortRU = [7]string{"вс", "пн", "вт", "ср", "чт", "пт", "сб"}
+var weekdaysShort = [7]string{"нд", "пн", "вт", "ср", "чт", "пт", "сб"}
 
-// whenLabel renders an appointment's start as "пн 8 июл, 10:30" (falls back to
+// whenLabel renders an appointment's start as "пн 8 лип, 10:30" (falls back to
 // the raw stored value if it can't be parsed).
 func (b *Bot) whenLabel(a model.Appointment) string {
 	t, err := a.Start(b.cfg.Loc)
@@ -216,7 +216,7 @@ func (b *Bot) whenLabel(a model.Appointment) string {
 		return a.StartsAt
 	}
 	return fmt.Sprintf("%s %d %s, %02d:%02d",
-		weekdaysShortRU[int(t.Weekday())], t.Day(), monthsRU[int(t.Month())], t.Hour(), t.Minute())
+		weekdaysShort[int(t.Weekday())], t.Day(), monthsShort[int(t.Month())], t.Hour(), t.Minute())
 }
 
 func (b *Bot) formatAppt(a model.Appointment) string {
@@ -254,19 +254,19 @@ func (b *Bot) mirrorToGroup(c tele.Context, text string) {
 }
 
 func (b *Bot) groupAddText(c tele.Context, items []model.Appointment) string {
-	head := "🆕 Новый визит"
+	head := "🆕 Новий візит"
 	if len(items) > 1 {
-		head = "🆕 Новые визиты"
+		head = "🆕 Нові візити"
 	}
 	return head + byLine(c) + ":\n\n" + b.formatList(items)
 }
 
 func (b *Bot) groupChangeText(c tele.Context, a model.Appointment, verb string) string {
-	return "🔄 Визит " + verb + byLine(c) + ":\n" + b.formatAppt(a)
+	return "🔄 Візит " + verb + byLine(c) + ":\n" + b.formatAppt(a)
 }
 
 func (b *Bot) groupCancelText(c tele.Context, a model.Appointment) string {
-	return "✗ Визит отменён" + byLine(c) + ":\n" + b.formatAppt(a)
+	return "✗ Візит скасовано" + byLine(c) + ":\n" + b.formatAppt(a)
 }
 
 // byLine attributes a group notification to whoever made the change.
@@ -298,17 +298,17 @@ func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now tim
 	if err != nil {
 		b.logger.Error("bot: parse when", "err", err)
 		b.awaiting.set(senderID(c), apptID, "time", now) // keep it, let the user retry
-		return c.Send("Не понял дату. Напиши, например: в пятницу 17:00")
+		return c.Send("Не зрозумів дату. Напиши, наприклад: у п’ятницю 17:00")
 	}
 	if err := b.store.Reschedule(apptID, when.Format(model.LocalDatetime)); err != nil {
 		b.logger.Error("bot: reschedule", "err", err, "id", apptID)
-		return c.Send("Не удалось перенести 😕")
+		return c.Send("Не вдалося перенести 😕")
 	}
 	a, err := b.store.Get(apptID)
 	if err != nil {
-		return c.Send("Перенёс, но не смог показать 🤔")
+		return c.Send("Переніс, але не зміг показати 🤔")
 	}
-	b.mirrorToGroup(c, b.groupChangeText(c, a, "перенесён"))
+	b.mirrorToGroup(c, b.groupChangeText(c, a, "перенесено"))
 	return c.Send("✅ Перенесено:\n"+b.formatAppt(a), tele.ModeHTML)
 }
 
@@ -316,14 +316,14 @@ func (b *Bot) applyReschedule(c tele.Context, apptID int64, text string, now tim
 func (b *Bot) applyFieldEdit(c tele.Context, apptID int64, field, value string, update func(int64, string) error) error {
 	if err := update(apptID, value); err != nil {
 		b.logger.Error("bot: edit field", "err", err, "id", apptID, "field", field)
-		return c.Send("Не удалось изменить 😕")
+		return c.Send("Не вдалося змінити 😕")
 	}
 	a, err := b.store.Get(apptID)
 	if err != nil {
-		return c.Send("Изменил, но не смог показать 🤔")
+		return c.Send("Змінив, але не зміг показати 🤔")
 	}
-	b.mirrorToGroup(c, b.groupChangeText(c, a, "изменён"))
-	return c.Send("✅ Изменено:\n"+b.formatAppt(a), tele.ModeHTML)
+	b.mirrorToGroup(c, b.groupChangeText(c, a, "змінено"))
+	return c.Send("✅ Змінено:\n"+b.formatAppt(a), tele.ModeHTML)
 }
 
 // senderID is the message author's Telegram id (0 if unknown).

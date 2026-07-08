@@ -46,15 +46,15 @@ func TestWeekWindowFromMonday(t *testing.T) {
 }
 
 func TestWeekLabel(t *testing.T) {
-	// Same-month range: [6 июл, 13 июл) -> "6–12 июл".
+	// Same-month range: [6 лип, 13 лип) -> "6–12 лип".
 	from := time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC)
-	if got := weekLabel(from, from.AddDate(0, 0, 7)); got != "6–12 июл" {
-		t.Fatalf("same-month label = %q, want %q", got, "6–12 июл")
+	if got := weekLabel(from, from.AddDate(0, 0, 7)); got != "6–12 лип" {
+		t.Fatalf("same-month label = %q, want %q", got, "6–12 лип")
 	}
-	// Cross-month range: [28 июл, 4 авг) -> "28 июл – 3 авг".
+	// Cross-month range: [28 лип, 4 сер) -> "28 лип – 3 сер".
 	from = time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC)
-	if got := weekLabel(from, from.AddDate(0, 0, 7)); got != "28 июл – 3 авг" {
-		t.Fatalf("cross-month label = %q, want %q", got, "28 июл – 3 авг")
+	if got := weekLabel(from, from.AddDate(0, 0, 7)); got != "28 лип – 3 сер" {
+		t.Fatalf("cross-month label = %q, want %q", got, "28 лип – 3 сер")
 	}
 }
 

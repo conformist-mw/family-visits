@@ -66,7 +66,7 @@ func (b *Bot) sendDailyDigest(now time.Time) {
 	if len(items) == 0 {
 		return // no visits today — stay quiet rather than spam
 	}
-	text := "☀️ Сегодня:\n\n" + b.formatList(items)
+	text := "☀️ Сьогодні:\n\n" + b.formatList(items)
 	if _, err := b.b.Send(tele.ChatID(b.cfg.NotifyChat), text, tele.ModeHTML); err != nil {
 		b.logger.Error("bot: send daily digest", "err", err)
 	}
@@ -96,7 +96,7 @@ func (b *Bot) weekItems() ([]model.Appointment, bool) {
 }
 
 func (b *Bot) weekText(items []model.Appointment) string {
-	return "🗓 На ближайшую неделю:\n\n" + b.formatList(items)
+	return "🗓 На найближчий тиждень:\n\n" + b.formatList(items)
 }
 
 // weekDigest is the text for the /week command; unlike the scheduler it always
@@ -104,7 +104,7 @@ func (b *Bot) weekText(items []model.Appointment) string {
 func (b *Bot) weekDigest() string {
 	items, empty := b.weekItems()
 	if empty {
-		return "На ближайшую неделю визитов нет."
+		return "На найближчий тиждень візитів немає."
 	}
 	return b.weekText(items)
 }

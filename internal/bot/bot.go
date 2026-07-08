@@ -114,10 +114,10 @@ func New(cfg Config, st *store.Store, parser *parse.Parser, logger *slog.Logger)
 	// Populate the "/" command menu (best-effort; a network hiccup here must
 	// not block startup).
 	if err := tb.SetCommands([]tele.Command{
-		{Text: "visit", Description: "Добавить визит: /visit завтра 15:00 педикюр"},
-		{Text: "week", Description: "Что на ближайшую неделю"},
-		{Text: "list", Description: "Визиты по неделям: перенос, правка, отмена"},
-		{Text: "help", Description: "Как пользоваться"},
+		{Text: "visit", Description: "Додати візит: /visit завтра 15:00 педикюр"},
+		{Text: "week", Description: "Що на найближчий тиждень"},
+		{Text: "list", Description: "Візити по тижнях: перенесення, правка, скасування"},
+		{Text: "help", Description: "Як користуватися"},
 	}); err != nil {
 		logger.Warn("bot: set commands", "err", err)
 	}
@@ -193,7 +193,7 @@ func (b *Bot) authMiddleware(next tele.HandlerFunc) tele.HandlerFunc {
 				username = c.Sender().Username
 			}
 			b.logger.Warn("bot: unauthorized chat", "chat_id", id, "user", username)
-			return c.Send("Доступ запрещён.")
+			return c.Send("Доступ заборонено.")
 		}
 		return next(c)
 	}
