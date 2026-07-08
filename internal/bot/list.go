@@ -99,13 +99,17 @@ func (b *Bot) onNav(c tele.Context) error {
 	if err != nil {
 		return b.editToList(c, offset) // visit vanished — fall back to the list
 	}
+	private := isPrivate(c)
 	switch view {
 	case "edit":
+		if !private { // field editing is private-only; fall back to the card
+			return c.Edit(b.formatAppt(a), b.cardMarkup(a.ID, offset, false), tele.ModeHTML)
+		}
 		return c.Edit(b.formatAppt(a), b.editMarkup(a.ID, offset), tele.ModeHTML)
 	case "cancel":
 		return c.Edit("Отменить визит?\n"+b.formatAppt(a), b.cancelMarkup(a.ID, offset), tele.ModeHTML)
 	default: // card
-		return c.Edit(b.formatAppt(a), b.cardMarkup(a.ID, offset), tele.ModeHTML)
+		return c.Edit(b.formatAppt(a), b.cardMarkup(a.ID, offset, private), tele.ModeHTML)
 	}
 }
 
@@ -113,6 +117,12 @@ func (b *Bot) onNav(c tele.Context) error {
 // visit the sender is editing and prompts them for the new value. Their next
 // text message is applied in onText. Data is "<field>:<id>" (field ∈ time/title/who).
 func (b *Bot) onArm(c tele.Context) error {
+	// Field edits take the sender's next text message as the new value. In a
+	// group any member (or bot) can post at any moment and would be captured, so
+	// arming is restricted to private chats.
+	if !isPrivate(c) {
+		return c.Respond(&tele.CallbackResponse{Text: "Правки визитов — в личке со мной 🙏", ShowAlert: true})
+	}
 	field, arg := splitData(c.Data())
 	id, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
@@ -165,17 +175,27 @@ func (b *Bot) editToList(c tele.Context, offset int) error {
 
 // ── markup ────────────────────────────────────────────────────────────────────
 
-func (b *Bot) cardMarkup(id int64, offset int) *tele.ReplyMarkup {
+func (b *Bot) cardMarkup(id int64, offset int, private bool) *tele.ReplyMarkup {
 	m := &tele.ReplyMarkup{}
 	ids := strconv.FormatInt(id, 10)
 	ref := ids + ":" + strconv.Itoa(offset)
+	back := m.Row(m.Data("← К списку", "lst_nav", "week:"+strconv.Itoa(offset)))
+	if !private {
+		// In groups, the text-driven edits (Перенести/Изменить) are disabled —
+		// only the button-only cancel is safe from stray messages being captured.
+		m.Inline(
+			m.Row(m.Data("✗ Отменить", "lst_nav", "cancel:"+ref)),
+			back,
+		)
+		return m
+	}
 	m.Inline(
 		m.Row(
 			m.Data("→ Перенести", "lst_arm", "time:"+ids),
 			m.Data("✎ Изменить", "lst_nav", "edit:"+ref),
 			m.Data("✗ Отменить", "lst_nav", "cancel:"+ref),
 		),
-		m.Row(m.Data("← К списку", "lst_nav", "week:"+strconv.Itoa(offset))),
+		back,
 	)
 	return m
 }
