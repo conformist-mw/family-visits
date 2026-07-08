@@ -30,7 +30,7 @@ func (b *Bot) listView(offset int) (string, *tele.ReplyMarkup, bool, error) {
 	winStart, winEnd := weekWindow(now, offset)
 	from := winStart
 	if offset == 0 {
-		from = startOfDay(now) // don't surface earlier days of the current week
+		from = now // current week starts "now": hide days/visits already past
 	}
 
 	items, err := b.store.Between(from.Format(model.LocalDatetime), winEnd.Format(model.LocalDatetime))

@@ -82,12 +82,13 @@ func (b *Bot) sendWeeklyDigest() {
 	}
 }
 
-// weekItems returns the next 7 days of visits (from the start of today).
+// weekItems returns upcoming visits over the next 7 days. The lower bound is
+// now (not the start of today), so visits already past earlier today drop off.
 func (b *Bot) weekItems() ([]model.Appointment, bool) {
-	from := startOfDay(b.now())
+	now := b.now()
 	items, err := b.store.Between(
-		from.Format(model.LocalDatetime),
-		from.AddDate(0, 0, 7).Format(model.LocalDatetime))
+		now.Format(model.LocalDatetime),
+		startOfDay(now).AddDate(0, 0, 7).Format(model.LocalDatetime))
 	if err != nil {
 		b.logger.Error("bot: week query", "err", err)
 		return nil, true
